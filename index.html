@@ -172,11 +172,11 @@
                 }
             },
             updated() {
-                this.$nextTick(function () {
-                    // 每次渲染后保证整体页面的滚动条在最底部
-                    // console.log("scrollHeight:"+document.body.scrollHeight)
-                    document.documentElement.scrollTop = document.body.scrollHeight
-                })
+//                 this.$nextTick(function () {
+//                     // 每次渲染后保证整体页面的滚动条在最底部
+//                     // console.log("scrollHeight:"+document.body.scrollHeight)
+//                     document.documentElement.scrollTop = document.body.scrollHeight
+//                 })
             },
             methods: {
                 // 点击上传按钮
