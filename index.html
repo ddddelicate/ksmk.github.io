@@ -25,13 +25,9 @@
             overflow-y: scroll;
         }
 
-        /* 父组件floatOl_fa 保证浮动在顶层 */
-        #floatOl_fa {
+        #floatOl {
             position: absolute;
             color: rgba(255, 255, 255, 0);
-        }
-
-        #floatOl {
             width: auto;
             max-height: 200px;
             min-width: 120px;
@@ -135,11 +131,9 @@
                         <!-- 双向绑定对象today_goods的属性name，并侦听其值，显示组件-浮动窗口进行模糊匹配，选定后填充该goods的相关信息 -->
                         <input type="text" class="form-control" placeholder="请输入关键词" v-model="today_goods.name" @focus="clickEvent($event)" @blur="clickEvent($event)" />
                         <!-- 输入建议，窗口浮动在最顶层 -->
-                        <div id="floatOl_fa" v-show="showflag">
                             <!-- 不能绑定click事件，因为比input的失焦blur事件比click优先执行，失焦响应后v-if==false，输入建议框不予显示，由此不能触发click事件 -->
                             <!-- 而mousedown比失焦优先响应，按下不松开就能触发 -->
-                            <ol id="floatOl" @mousedown="clickEvent($event)"></ol>
-                        </div>
+                            <ol id="floatOl" v-show="showflag" @mousedown="clickEvent($event)"></ol>
                     </td>
                     <!-- 双向绑定对象today_goods的属性unit、weight_send、price_unit -->
                     <td v-for="key in Object.keys(today_goods).slice(2,5)"><input type="text" class="form-control" v-model="today_goods[key]" /></td>
