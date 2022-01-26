@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+
+    <script src="./xlsx.full.min.js"></script>
+    <script src="./vue.js"></script>
+    <link rel="stylesheet" href="./Bootstrap v3.3.7.css" />
+    <style>
+        [v-cloak] {
+            display: none;
+        }
+
+        #app {
+            min-width: 1100px;
+            margin-bottom: 200px;
+        }
+
+        #droptarget {
+            width: 100%;
+            height: 150px;
+            overflow-y: scroll;
+        }
+
+        /* 父组件floatOl_fa 保证浮动在顶层 */
+        #floatOl_fa {
+            position: absolute;
+            color: rgba(255, 255, 255, 0);
+        }
+
+        #floatOl {
+            width: auto;
+            max-height: 200px;
+            min-width: 120px;
+            overflow-y: auto;
+            /* overflow-x: hidden; */
+            border: 1px solid rgb(24, 134, 224);
+            border-radius: 4px;
+            background-color: white;
+            color: black;
+            display: inline-block;
+            list-style-type: none;
+            padding: 8px 5px 8px 10px;
+            margin: 0;
+
+        }
+        /* 浮动列表样式 */
+        ol li:hover {
+            display: block;
+            color: rgb(0, 119, 255);
+            background-color: rgb(247, 247, 247);
+        }
+
+        .thcenter {
+            text-align: center;
+            font-weight: 900;
+            font-size: 120%;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <!-- 用于拖放送货重量单文件，适用xslx/xls版本 -->
+        <div class="panel panel-primary">
+            <div class="panel-heading">
+                <h3 class="panel-title">送货报价单</h3>
+            </div>
+            <!--@dragenter="handleEvent($event)
+            @dragleave="handleEvent($event)
+            @dragover="handleEvent($event)
+            @drop="handleEvent($event)
+            分别绑定了拖动移入、拖动离开、移动拖动对象、松开对象的事件
+            -->
+            <div class="panel-body form-inline" v-cloak id="droptarget" @dragenter="handleEvent($event)"
+                @dragleave="handleEvent($event)" @dragover="handleEvent($event)" @drop="handleEvent($event)">
+                拖拽上传文件
+                <br>   或<br>
+                <Button @click="openFiles" >上传文件</Button>
+                <input ref="filElemExcel" type="file" @change="getFileExcel" style="display: none;"/>
+            </div>
+        </div>
+        <table id="finaltable" class="table table-hover table-bordered table-striped">
+            <thead>
+                <tr>
+                    <th colspan="9" class="thcenter">
+                        昆山市明坤餐饮管理有限公司
+                    </th>
+                    <th rowspan="2"><input type="button" value="  下 载  " class="btn btn-primary" @click="download" /></th>
+                </tr>
+                <tr>
+                    <th colspan="9" v-cloak class="thcenter">
+                        鸿本{{time[1]}}月{{time[2]}}号食材送货单
+                    </th>
+                </tr>
+                <tr>
+                    <!-- 列名 "序号","编码","品名","单位","送货重量","单价","总价","实收重量","备注","删除操作"-->
+                    <th v-for="item in item_cloname" v-text="item"></th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr v-for="(item,index) in list_download" :key="index">
+                    <!-- 序号的值 -->
+                    <td v-text="index+1"></td>
+                    <!-- 其余列名的值 -->
+                    <td v-for="val in item" v-text="val"></td>
+                    <td v-cloak><a href="" @click.prevent="del(index)">删除</a></td>
+                </tr>
+                <tr>
+                    <td>合计</td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td v-text="price_total"></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <td colspan="5"></td>
+                    <td>日期:</td>
+                    <td v-for="item in time" v-text="item"></td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <td><input type="text" class="form-control" v-model="number" readonly="readonly" /></td>
+                    <!-- 双向绑定对象today_goods的属性code -->
+                    <td v-for="key in Object.keys(today_goods).slice(0,1)"><input type="text" class="form-control" v-model="today_goods[key]" readonly="readonly" /></td>
+                    <td>
+                        <!-- 双向绑定对象today_goods的属性name，并侦听其值，显示组件-浮动窗口进行模糊匹配，选定后填充该goods的相关信息 -->
+                        <input type="text" class="form-control" placeholder="请输入关键词" v-model="today_goods.name" @focus="clickEvent($event)" @blur="clickEvent($event)" />
+                        <!-- 输入建议，窗口浮动在最顶层 -->
+                        <div id="floatOl_fa" v-show="showflag">
+                            <!-- 不能绑定click事件，因为比input的失焦blur事件比click优先执行，失焦响应后v-if==false，输入建议框不予显示，由此不能触发click事件 -->
+                            <!-- 而mousedown比失焦优先响应，按下不松开就能触发 -->
+                            <ol id="floatOl" @mousedown="clickEvent($event)"></ol>
+                        </div>
+                    </td>
+                    <!-- 双向绑定对象today_goods的属性unit、weight_send、price_unit -->
+                    <td v-for="key in Object.keys(today_goods).slice(2,5)"><input type="text" class="form-control" v-model="today_goods[key]" /></td>
+                    <!-- 双向绑定该goods的单价*数量的总金额，自动计算computed，只读，不可修改，保证数据安全 -->
+                    <td><input type="text" class="form-control" v-model="price_sum" readonly="readonly" /></td>
+                    <!-- 双向绑定对象today_goods的属性weight_get、note -->
+                    <td v-for="key in Object.keys(today_goods).slice(5,7)"><input type="text" class="form-control" v-model="today_goods[key]" /></td>
+                    <td><input type="button" value="添加" class="btn btn-primary" @click="add" /></td>
+                </tr>
+            </tbody>
+        </table>
+
+    </div>
+    <script>
+        var vm = new Vue({
+            el: "#app",
+            data() {
+                return {
+                    data_json: "",
+                    item_cloname: ["序号", "编码", "品名", "单位", "送货重量", "单价", "总价", "实收重量", "备注", "删除操作"],
+                    today_goods: {
+                        code: "",//编码
+                        name: "",//品名
+                        unit: "",//单位
+                        weight_send: "",//送货重量
+                        price_unit: "", //单价
+                        // price_sum: "",  //总价,computed计算属性
+                        weight_get: "", //实收重量
+                        note: "",       //备注
+                    },
+                    showflag: false,  //用于v-show切换输入建议组件
+                    floatList: [],    //存放输入建议
+                    list_download: [],//存放待打印的表单
+                    // price_total:"",//合计价格,computed计算属性
+                    time: [new Date().getFullYear(), new Date().getMonth() + 1, new Date().getDate()]
+                }
+            },
+            updated() {
+                this.$nextTick(function () {
+                    // 每次渲染后保证整体页面的滚动条在最底部
+                    // console.log("scrollHeight:"+document.body.scrollHeight)
+                    document.documentElement.scrollTop = document.body.scrollHeight
+                })
+            },
+            methods: {
+                // 点击上传按钮
+                openFiles() {
+                    this.$refs.filElemExcel.dispatchEvent(new MouseEvent("click"));
+                },
+                // 选中文件后
+                getFileExcel(e) {
+                    // console.log(e);
+                    let f = e.target.files[0];
+                    // console.log(f);
+                    let ext=f.name.substr(f.name.lastIndexOf(".") + 1);
+                    if(ext == "xls"|| ext == "xlsx"){
+                        this.readExcel(f);
+                    }
+                    else{
+                        alert("请上传正确文件")
+                    }
+                },
+                //拖入文件，获取json形式的数据表
+                handleEvent(event) {
+                    event.preventDefault();
+                    if (event.type == "drop") {     //只有在drop时
+                        let files = event.dataTransfer.files,//文件数组
+                            f = files[files.length - 1];//每次读取最后拖入文件
+                        // console.log(f);
+                        let ext = f.name.substr(f.name.lastIndexOf(".") + 1);
+                        if (ext == "xls" || ext == "xlsx") {
+                            this.readExcel(f);
+                        }
+                        else {
+                            alert("请上传正确文件")
+                        }
+                    }
+                },
+                //读取excel文件
+                readExcel(f) {
+                    let reader = new FileReader();  //读取文件对象
+                    reader.readAsBinaryString(f);   //二进制形式读取文件
+                    _this = this;
+                    reader.onload = function (e) {  //加载
+                        let data = e.target.result, //返回事件的目标节点（触发该事件的节点）
+                            workbook = XLSX.read(data, { type: 'binary' }),     //读取excel
+                            worksheet = workbook.Sheets[workbook.SheetNames[0]];//默认选取第一个sheet
+                        // console.log(worksheet)      //获取该表的信息
+                        //处理excel表
+                        if (Array.isArray(worksheet['!merges'])) {  //判断是否有合并标题
+                            let len = worksheet['!merges'].length       //获取合并标题个数
+                            for (let i = 0; i <= len; i++) {        //删除合并标题后，获得属性及记录
+                                delete worksheet["A" + i]
+                            }
+                            //***************************
+                            //error：如果合并标题在最后一行出现，也会计入数值len，不能仅仅考虑开头的大标题。
+                            //          综上，不能采用读取excel表获取data。需要存入在数据库中获取数据。
+                            //**************************
+                            //替换第2个字符，修改数据范围，协助转换json，因为sheet_to_json确定属性名是根据范围!ref标识的第一行，若无则显示empty
+                            worksheet["!ref"] = worksheet["!ref"].replace(1, len + 1)
+                        }
+                        //打印
+                        let data_html = XLSX.utils.sheet_to_html(worksheet);//获得html形式的数据表
+                        droptarget.innerHTML = data_html    //显示在web上
+                        _this.data_json = XLSX.utils.sheet_to_json(worksheet);//获得json形式的数据表
+                         console.log(_this.data_json)              //显示在后台，便于研究
+                    }
+                },
+                clickEvent(event) {//同时接收FocusEvent(包括focus和blur)和MouseEvent两个事件
+                    //在给<li>标签绑定事件时会率先执行一遍该函数"this.clickEvent()"，由于参数为空，event未定义
+                    if (typeof (event) != "undefined") {
+                        // console.log(event.type);
+                        //MouseEvent事件
+                        if (event.type == "mousedown" && event.target.nodeName == "LI") {//若拖动点击了多个，点击对象为标签<OL>
+                            this.today_goods.name = event.target.innerHTML//"品名"赋值后，侦听部分watch:name响应
+                            return;
+                        }
+                        //FocusEvent获焦事件
+                        if (event.type == "focus" && this.floatList.length) {
+                            this.showflag = true;
+                        }
+                        //FocusEvent失焦事件
+                        if (event.type == "blur") {
+                            this.showflag = false;
+                        }
+
+                    }
+                },
+                add() {
+                    if (this.data_json) {
+                        //编码、品名、单位、送货重量、单价不为空即可添加
+                        if (this.today_goods.code && this.today_goods.name && this.today_goods.unit
+                            && this.today_goods.weight_send && this.today_goods.price_unit) {
+
+                            let judge = true;
+                            judge = this.list_download.every(item => {//判断待打印列表中的每一个品名都与该品名不相等，才表示添加不重复（该判断应由数据库返回）
+                                return item.name != this.today_goods.name ? true : false
+                            })
+                            // ******************************若填写了不存在的品种仍会添加进去吗
+                            // 不存在这样问题，readonly使得不予修改品种编码，侦听品种的名称name后，每次变化使得相关信息清空，而在添加前就已经判断是否为空，若空不予添加
+                            if (judge) {
+                                //新建一个临时对象
+                                let tempGoods = {};
+                                Object.keys(this.today_goods).slice(0, 5).map((name, index) => {
+                                    tempGoods[name] = Object.values(this.today_goods).slice(0, 5)[index]
+                                });
+                                tempGoods['price_sum'] = this.price_sum; //拼接一个属性price_sum，即计算过的单价*数量
+                                Object.keys(this.today_goods).slice(5, 7).map((name, index) => {
+                                    tempGoods[name] = Object.values(this.today_goods).slice(5, 7)[index]
+                                });
+                                this.list_download.push(tempGoods)      //添加进待打印输出的列表，对象数组
+                                // console.log(tempGoods);
+                                // this.number = this.list_download.length + 1;
+                                this.today_goods.code = this.today_goods.name = this.today_goods.unit = "";
+                                this.today_goods.weight_send = this.today_goods.price_unit = this.today_goods.weight_get = this.today_goods.note = "";
+                                this.showflag = false;
+                                //console.log(this.price_total)
+                            }
+                            else {
+                                alert("已添加该品种!");
+                            }
+                        }
+                        else {
+                            alert("未填写完整!")
+                        }
+                    }
+                    else {
+                        alert("请先添加本月报价单!");
+                    }
+                },
+                del(index) {
+                    this.list_download.splice(index, 1)
+                },
+                download() {
+                    if (confirm("确认要下载生成excel文件吗？")) {
+                        let finalsheet = XLSX.utils.table_to_sheet(document.getElementById("finaltable"))
+                        console.log(finalsheet)
+                        //处理excel，
+                        let len = this.list_download.length + 6
+                        for (let i = 1; i <= len; i++) {//删除最后一列,功能列：下载、删除、添加
+                            delete finalsheet["J" + i]
+                        }
+                        for (let i = 0; i < 9; i++) {//删除最后一行，功能行：添加品种
+                            delete finalsheet[String.fromCharCode(65 + i)]
+                        }
+                        //修改数据范围，协助转换
+                        finalsheet["!fullref"] = finalsheet["!ref"] = finalsheet["!ref"].replace("J" + len, "I" + (len - 1))
+                        //下载
+                        let finalwb = XLSX.utils.book_new();//新建一个文件对象
+                        XLSX.utils.book_append_sheet(finalwb, finalsheet, "sheet1");//workbook插入worksheet,并命名"sheet1"
+                        XLSX.writeFile(finalwb,
+                            "明坤团膳送货单表格-" + this.time[0] + "." + this.time[1]
+                            + "." + this.time[2] + ".xlsx");
+                    }
+                }
+            },
+            watch: {
+                //对关键词name模糊匹配，采用watch侦听name变化，比input绑定kepup效果更好，缩小条件范围
+                'today_goods.name': function (val) {
+                    //name变化时，预先清空相关信息。
+                    this.showflag = false;  //浮动窗口不予显示
+                    this.floatList = "";    //输入建议列表
+                    this.today_goods.code = this.today_goods.unit = "";//相关信息
+                    this.today_goods.weight_send = this.today_goods.price_unit = this.today_goods.weight_get = this.today_goods.note = "";
+
+                    //模糊匹配
+                    if (this.data_json && this.today_goods.name) {//判断查找对象、关键字是否为空值
+                        //filter过滤器，筛选含有name的记录
+                        this.floatList = this.data_json.filter(item => {
+                            if (item["品名"].includes(this.today_goods.name)) { //若含有name，则保留该记录
+                                if (item["品名"] == this.today_goods.name) {    //若相等，直接填充相关信息，不再弹出输入建议。
+                                    this.today_goods.code = item["编码"]
+                                    this.today_goods.unit = item["单位"]
+                                    this.today_goods.price_unit = item["核准价"]
+                                    this.today_goods.note = item["备注"]
+                                    // this.showflag = false;
+                                    return;//未执行完毕，直接退出时 this.floatList.length==0
+                                }
+                                return item
+                            }
+                        })
+                        // console.log(this.floatList)
+                        //若匹配个数不为0，制作输入建议框
+                        if (this.floatList.length) {
+                            let floatOl = document.getElementById("floatOl");   //获得组件ol对象floatOl
+                            floatOl.innerHTML = ""; //每次填充列表前清空原有的值
+                            for (i = 0; i < this.floatList.length; i++) {//遍历列表，窗口ol中插入组件li
+                                let floatLi = document.createElement("li");
+                                floatLi.innerHTML = this.floatList[i]["品名"];  //组件Li赋予名称
+                                floatLi.onclick = this.clickEvent()             //组件Li绑定事件
+                                floatOl.appendChild(floatLi)
+                            }
+                            this.showflag = true; return;//填充完毕，显现该列表
+                        }
+                    }
+                },
+            },
+            computed: {
+                "number": function () {//计算序号
+                    return this.list_download.length + 1;
+                },
+                "price_sum": function () {//计算总价
+                    return this.today_goods.price_unit * this.today_goods.weight_send
+                },
+                "price_total": function () {//合计
+                    let total = 0;
+                    this.list_download.forEach(item => {
+                        total += item.price_sum;
+                    })
+                    return total
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>
